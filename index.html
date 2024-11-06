@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sudoku Game</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #fafafa;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      margin: 0;
+    }
+
+    h1 {
+      color: #333;
+    }
+
+    .sudoku-grid {
+      display: grid;
+      grid-template-columns: repeat(9, 1fr);
+      grid-template-rows: repeat(9, 1fr);
+      gap: 2px;
+      width: 450px;
+      height: 450px;
+      border: 2px solid #333;
+    }
+
+    .sudoku-cell {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-size: 24px;
+      font-weight: bold;
+      background-color: #ffffff;
+      color: #333333;
+      cursor: pointer;
+      width: 50px;
+      height: 50px;
+      border: 1px solid #333;
+      transition: background-color 0.3s, color 0.3s;
+    }
+
+    .sudoku-cell.editable {
+      background-color: #f0f0f0;
+    }
+
+    .sudoku-cell.error {
+      background-color: #ff6b6b;
+      color: #ffffff;
+    }
+
+    .sudoku-cell.correct {
+      background-color: #4caf50;
+      color: #ffffff;
+    }
+
+    .sudoku-cell.initial {
+      background-color: #e0e0e0;
+    }
+
+    .buttons {
+      margin-top: 20px;
+    }
+
+    .buttons button {
+      margin: 0 10px;
+      padding: 10px 20px;
+      font-size: 16px;
+      background-color: #4caf50;
+      color: #ffffff;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      transition: background-color 0.3s;
+    }
+
+    .buttons button:hover {
+      background-color: #43a047;
+    }
+
+    .popup {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0, 0, 0, 0.5);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 100;
+    }
+
+    .popup-content {
+      background-color: #ffffff;
+      padding: 20px;
+      border-radius: 5px;
+      text-align: center;
+    }
+
+    .popup-content button {
+      background-color: #ff5722;
+    }
+  </style>
+</head>
+<body>
+  <h1>Sudoku Game</h1>
+  <div class="sudoku-grid">
+    <!-- Sudoku cells will be dynamically generated here -->
+  </div>
+
+  <div class="buttons">
+    <button id="hint-btn">Get Hint</button>
+    <button id="undo-btn">Undo</button>
+    <button id="redo-btn">Redo</button>
+    <button id="reset-btn">Reset</button>
+  </div>
+
+  <div class="popup" id="win-popup" style="display: none;">
+    <div class="popup-content">
+      <h2>Congratulations!</h2>
+      <p>You've solved the Sudoku puzzle!</p>
+      <button id="close-popup">Close</button>
+    </div>
+  </div>
+
+  <script>
+    const sudokuGrid = document.querySelector('.sudoku-grid');
+    const hintBtn = document.getElementById('hint-btn');
+    const undoBtn = document.getElementById('undo-btn');
+    const redoBtn = document.getElementById('redo-btn');
+    const resetBtn = document.getElementById('reset-btn');
+    const winPopup = document.getElementById('win-popup');
+    const closePopupBtn = document.getElementById('close-popup');
+
+    let sudokuData = [];
+    let history = [];
+    let currentIndex = -1;
+
+    initSudokuGame();
+
+    function initSudokuGame() {
+      generateSudokuGrid();
+      addCellEventListeners();
+      addButtonEventListeners();
+      generateSudokuPuzzle();
+    }
+
+    function generateSudokuGrid() {
+      for (let i = 0; i < 81; i++) {
+        const cell = document.createElement('div');
+        cell.classList.add('sudoku-cell', 'editable');
+        sudokuGrid.appendChild(cell);
+      }
+    }
+
+    function addCellEventListeners() {
+      const cells = document.querySelectorAll('.sudoku-cell');
+      cells.forEach((cell, index) => {
+        cell.addEventListener('click', () => {
+          handleCellInput(index);
+        });
+      });
+    }
+
+    function addButtonEventListeners() {
+      hintBtn.addEventListener('click', showHint);
+      undoBtn.addEventListener('click', undoMove);
+      redoBtn.addEventListener('click', redoMove);
+      resetBtn.addEventListener('click', resetGame);
+      closePopupBtn.addEventListener('click', () => {
+        winPopup.style.display = 'none';
+      });
+    }
+
+    function generateSudokuPuzzle() {
+      // Generate a valid Sudoku puzzle with pre-filled cells
+      sudokuData = [
+        [5, 3, 0, 0, 7, 0, 0, 0, 0],
+        [6, 0, 0, 1, 9, 5, 0, 0, 0],
+        [0, 9, 8, 0, 0, 0, 0, 6, 0],
+        [8, 0, 0, 0, 6, 0, 0, 0, 3],
+        [4, 0, 0, 8, 0, 3, 0, 0, 1],
+        [7, 0, 0, 0, 2, 0, 0, 0, 6],
+        [0, 6, 0, 0, 0, 0, 2, 8, 0],
+        [0, 0, 0, 4, 1, 9, 0, 0, 5],
+        [0, 0, 0, 0, 8, 0, 0, 7, 9]
+      ];
+
+      updateSudokuGrid();
+      history = [sudokuData.map(row => [...row])];
+      currentIndex = 0;
+    }
+
+    function updateSudokuGrid() {
+      const cells = document.querySelectorAll('.sudoku-cell');
+      cells.forEach((cell, index) => {
+        const row = Math.floor(index / 9);
+        const col = index % 9;
+        if (sudokuData[row][col] !== 0) {
+          cell.textContent = sudokuData[row][col].toString();
+          cell.classList.remove('editable');
+          if (sudokuData[row][col] !== 0) {
+            cell.classList.add('initial');
+          }
+        } else {
+          cell.textContent = '';
+          cell.classList.add('editable');
+        }
+      });
+    }
+
+    function handleCellInput(index) {
+      const row = Math.floor(index / 9);
+      const col = index % 9;
+      const cells = document.querySelectorAll('.sudoku-cell');
+
+      if (cells[index].classList.contains('editable')) {
+        const value = prompt('Enter a number (1-9):');
+        if (value >= 1 && value <= 9) {
+          if (isValidMove(row, col, parseInt(value))) {
+            sudokuData[row][col] = parseInt(value);
+            cells[index].textContent = value;
+            cells[index].classList.remove('error');
+            cells[index].classList.add('correct');
+            updateHistory();
+            if (isSudokuSolved()) {
+              showWinPopup();
+            }
+          } else {
+            cells[index].textContent = value;
+            cells[index].classList.add('error');
+            setTimeout(() => {
+              cells[index].classList.remove('error');
+            }, 1000);
+          }
+        }
+      }
+    }
+
+    function isValidMove(row, col, value) {
+      // Check row
+      for (let i = 0; i < 9; i++) {
+        if (sudokuData[row][i] === value && i !== col) {
+          return false;
+        }
+      }
+
+      // Check column
+      for (let i = 0; i < 9; i++) {
+        if (sudokuData[i][col] === value && i !== row) {
+          return false;
+        }
+      }
+
+      // Check subgrid
+      const startRow = Math.floor(row / 3) * 3;
+      const startCol = Math.floor(col / 3) * 3;
+      for (let r = 0; r < 3; r++) {
+        for (let c = 0; c < 3; c++) {
+          if (sudokuData[startRow + r][startCol + c] === value) {
+            return false;
+          }
+        }
+      }
+      return true;
+    }
+
+    function isSudokuSolved() {
+      for (let row = 0; row < 9; row++) {
+        for (let col = 0; col < 9; col++) {
+          if (sudokuData[row][col] === 0) {
+            return false;
+          }
+        }
+      }
+      return true;
+    }
+
+    function showWinPopup() {
+      winPopup.style.display = 'flex';
+    }
+
+    function showHint() {
+      // Show a hint by filling an empty cell with a valid value
+      let hintGiven = false;
+      for (let row = 0; row < 9; row++) {
+        for (let col = 0; col < 9; col++) {
+          if (sudokuData[row][col] === 0) {
+            const validValue = findValidValue(row, col);
+            if (validValue !== null) {
+              sudokuData[row][col] = validValue;
+              updateSudokuGrid();
+              hintGiven = true;
+              break;
+            }
+          }
+        }
+        if (hintGiven) break;
+      }
+    }
+
+    function findValidValue(row, col) {
+      for (let value = 1; value <= 9; value++) {
+        if (isValidMove(row, col, value)) {
+          return value;
+        }
+      }
+      return null;
+    }
+
+    function undoMove() {
+      if (currentIndex > 0) {
+        currentIndex--;
+        sudokuData = history[currentIndex];
+        updateSudokuGrid();
+      }
+    }
+
+    function redoMove() {
+      if (currentIndex < history.length - 1) {
+        currentIndex++;
+        sudokuData = history[currentIndex];
+        updateSudokuGrid();
+      }
+    }
+
+    function resetGame() {
+      generateSudokuPuzzle();
+    }
+  </script>
+</body>
+</html>
